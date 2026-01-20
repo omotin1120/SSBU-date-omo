@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>スマブラSP 勝率管理（パスワード保護付き）</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: sans-serif; margin:0; background:#f5f5f5; }
+    header { background:#222; color:white; padding:10px; position:sticky; top:0; z-index:10; }
+    nav button { margin-right:8px; padding:8px 12px; border:none; background:#444; color:white; border-radius:4px; cursor:pointer; }
+    nav button:hover { background:#666; transform:scale(1.03); }
+    .container { padding:20px; }
+    .page { display:none; animation:fadeIn .28s ease; }
+    .page.active { display:block; }
+    .card { background:white; padding:15px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-bottom:20px; }
+    input[type="text"], select, textarea { width:100%; padding:8px; margin:6px 0; border-radius:4px; border:1px solid #ccc; }
+    button.action { padding:10px 20px; margin-right:10px; border:none; background:#007bff; color:white; border-radius:4px; cursor:pointer; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { border:1px solid #ccc; padding:6px; text-align:center; }
+    .small-select { width:130px; padding:4px; border-radius:4px; border:1px solid #888; }
+    .total-box { border:2px solid #007bff; padding:6px 10px; border-radius:6px; font-weight:bold; display:inline-block; background:#f0f8ff; margin-bottom:6px; }
+    .reset-small { padding:6px 12px; font-size:13px; background:#dc3545; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+    .teal-action { background: linear-gradient(180deg,#1fb6a6,#0ea89a); color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
+    .death-editor-modal { position:fixed; inset:0; z-index:1200; display:flex; align-items:center; justify-content:center; }
+    .death-editor-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+    .death-editor-card { position:relative; background:#fff; padding:16px; width:min(720px,95%); max-height:80vh; overflow:auto; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.2); }
+    .death-editor-row { display:flex; gap:8px; align-items:center; padding:6px 4px; border-bottom:1px solid #eee; }
+    .death-editor-row input[type="text"] { flex:1; padding:6px; border:1px solid #ddd; border-radius:4px; }
+    .death-editor-row .count { width:96px; display:flex; gap:6px; align-items:center; justify-content:center; }
+    .death-editor-row .count button { padding:6px 8px; border-radius:4px; border:1px solid #ccc; background:#f7f7f7; cursor:pointer; }
+    .death-editor-row .count-value { min-width:36px; text-align:center; display:inline-block; }
+    .death-editor-row .row-actions { display:flex; gap:6px; align-items:center; }
+    .death-editor-row .row-actions button { padding:6px 8px; border-radius:4px; cursor:pointer; border:1px solid #ddd; background:#eee; }
+    .death-editor-card .row-actions .reset-small {
+      background: linear-gradient(180deg,#ff6b6b,#e64545);
+      color: #fff;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(230,69,69,0.18);
+      transition: transform 0.12s ease, filter 0.12s ease;
+      opacity: 1;
+    }
+    .death-editor-card .row-actions .reset-small:hover { transform: translateY(-1px); filter: brightness(0.95); }
+    .delete-all-button {
+      background: linear-gradient(180deg,#ff8a65,#ff5c3a);
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(255,92,58,0.18);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .delete-all-button:hover { transform: translateY(-1px); filter: brightness(0.95); }
+    #pwGate {
+      position:fixed; inset:0; z-index:99999;
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7));
+    }
+    #pwGate .pw-card {
+      background:#fff; padding:20px; border-radius:12px; width:92%; max-width:460px;
+      box-shadow:0 12px 40px rgba(0,0,0,0.45); text-align:left;
+    }
+    #pwGate h3 { margin:0 0 8px 0; font-size:18px; }
+    #pwGate input[type="password"] { width:100%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ccc; }
+    #pwGate .row { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+    #pwGate button { padding:8px 12px; border-radius:8px; border:none; cursor:pointer; }
+    #pwGate .ok { background:linear-gradient(180deg,#1fb6a6,#0ea89a); color:#fff; }
+    #pwGate .cancel { background:#ddd; }
+    #pwGate .msg { color:#c00; font-size:13px; min-height:18px; margin-top:6px; }
+    #appContent[aria-hidden="true"] { display:none !important; }
+    @media (max-width:520px) {
+      .death-editor-card { padding:12px; }
+      #pwGate .pw-card { padding:14px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="pwGate" role="dialog" aria-modal="true" aria-label="パスワード保護">
+    <div class="pw-card">
+      <h3>パスワードを入力してください</h3>
+      <div style="color:#444; margin-bottom:8px;">このページはパスワードで保護されています。友達に教えられたパスワードを入力してください。</div>
+      <input id="pwInput" type="password" placeholder="パスワードを入力" autocomplete="current-password" />
+      <div class="msg" id="pwMsg" aria-live="polite"></div>
+      <div class="row" style="margin-top:12px;">
+        <button class="cancel" id="pwCancel">閉じる</button>
+        <button class="ok" id="pwSubmit">開く</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="appContent" aria-hidden="true">
+    <header>
+      <nav>
+        <button onclick="showPage('inputPage')">対戦入力</button>
+        <button onclick="showPage('ratePage')">勝率ページ</button>
+        <button onclick="showPage('memoPage')">キャラ対策</button>
+      </nav>
+    </header>
+
+    <div class="container">
+      <div id="inputPage" class="page active">
+        <div class="card">
+          <h2>対戦入力</h2>
+          <label>キャラ検索：</label>
+          <input type="text" oninput="updateSelect('myCharInput', this.value); updateSelect('oppCharInput', this.value);" placeholder="キャラ名で検索">
+          <label>自分のキャラ：</label>
+          <select id="myCharInput"></select>
+          <label>相手のキャラ：</label>
+          <select id="oppCharInput"></select>
+          <div style="margin-top:8px;">
+            <button class="action" onclick="recordResult('win')">勝ち</button>
+            <button class="action" onclick="recordResult('lose')">負け</button>
+          </div>
+          <p id="inputMessage"></p>
+        </div>
+      </div>
+
+      <div id="deathInputArea" style="display:none;"></div>
+
+      <div id="ratePage" class="page">
+        <div class="card">
+          <h2>勝率ページ</h2>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+              <label>並び替え：</label>
+              <select id="sortMode" onchange="updateRateTable()" class="small-select">
+                <option value="normal">通常</option>
+                <option value="desc">勝率（高い順）</option>
+                <option value="asc">勝率（低い順）</option>
+              </select>
+            </div>
+            <div style="text-align:right;">
+              <div id="totalMatches" class="total-box">合計対戦数：0 回</div>
+              <button class="reset-small" onclick="resetCharacterData()">リセット</button>
+            </div>
+          </div>
+          <label>キャラ検索：</label>
+          <input type="text" oninput="updateSelect('myCharRate', this.value)" placeholder="キャラ名で検索">
+          <label>自分のキャラ：</label>
+          <select id="myCharRate" onchange="updateRateTable()"></select>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <table id="rateTable">
+            <thead>
+              <tr><th>相手キャラ</th><th>勝ち</th><th>負け</th><th>勝率</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="memoPage" class="page">
+        <div class="card">
+          <h2>キャラ対策</h2>
+          <label>キャラ検索：</label>
+          <input type="text" oninput="updateSelect('memoChar', this.value)" placeholder="キャラ名で検索">
+          <label>キャラ：</label>
+          <select id="memoChar" onchange="loadMemo()"></select>
+          <textarea id="memoText" maxlength="1500" placeholder="1500字まで入力できます"></textarea>
+          <button class="action" onclick="saveMemo()">保存</button>
+          <p id="memoMessage"></p>
+          <div style="text-align:right; margin-top:10px;">
+            <button class="action" onclick="showMatchData()">死因記録</button>
+          </div>
+          <div id="matchDataArea"></div>
+        </div>
+      </div>
+
+      <div id="deathEditorModal" class="death-editor-modal" style="display:none;">
+        <div class="death-editor-backdrop" onclick="onCloseDeathEditorRequest()"></div>
+        <div class="death-editor-card">
+          <h3 id="deathEditorTitle">死因記録 編集</h3>
+          <div id="deathEditorList" class="death-editor-list"></div>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px;">
+            <div>
+              <button class="delete-all-button" onclick="confirmDeleteAll()" aria-label="すべて削除">🗑️ すべて削除</button>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="teal-action" onclick="saveDeathEditor()">保存</button>
+              <button class="reset-small" onclick="onCloseDeathEditorRequest()">閉じる</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const PASSWORD_HASH = 'a388684be9ba3872dce4df12e02e7a2894fa2173a2473ef03c8d3ea9dcad397f';
+    const SESSION_KEY = 'ssbu_pw_unlocked_v1';
+
+    async function sha256hex(str) {
+      if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+        const enc = new TextEncoder().encode(str);
+        const buf = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+      }
+      return '';
+    }
+
+    function unlockGate() {
+      const gate = document.getElementById('pwGate');
+      const app = document.getElementById('appContent');
+      if (gate) gate.style.display = 'none';
+      if (app) {
+        app.setAttribute('aria-hidden','false');
+        app.style.display = '';
+      }
+      try { sessionStorage.setItem(SESSION_KEY, '1'); } catch(e){}
+    }
+
+    function closeGatePermanently() {
+      const gate = document.getElementById('pwGate');
+      if (gate) {
+        gate.innerHTML = '<div style="padding:18px; text-align:center; color:#666">ページは保護されています。</div>';
+      }
+    }
+
+    document.getElementById('pwSubmit').addEventListener('click', async () => {
+      const input = document.getElementById('pwInput').value || '';
+      const msgEl = document.getElementById('pwMsg');
+      msgEl.textContent = '';
+      if (!input) { msgEl.textContent = 'パスワードを入力してください'; return; }
+      const h = await sha256hex(input);
+      if (!h) { msgEl.textContent = 'このブラウザでは保護機能が利用できません'; return; }
+      if (h === PASSWORD_HASH) {
+        unlockGate();
+      } else {
+        msgEl.textContent = 'パスワードが違います';
+      }
+    });
+
+    document.getElementById('pwCancel').addEventListener('click', () => {
+      closeGatePermanently();
+    });
+
+    try {
+      if (sessionStorage.getItem(SESSION_KEY) === '1') {
+        unlockGate();
+      }
+    } catch(e){}
+
+    document.getElementById('pwInput').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        document.getElementById('pwSubmit').click();
+      }
+    });
+
+    // 以下はアプリ本体の JS（省略せずに統合）
+    const CHARACTERS = [
+      "マリオ","ドンキーコング","リンク","サムス","ダークサムス","ヨッシー","カービィ","フォックス","ピカチュウ",
+      "ルイージ","ネス","キャプテン・ファルコン","プリン","ピーチ","デイジー","クッパ","アイスクライマー","シーク",
+      "ゼルダ","ドクターマリオ","ピチュー","ファルコ","マルス","ルキナ","こどもリンク","ガノンドロフ","ミュウツー",
+      "ロイ","クロム","Mr.ゲーム＆ウォッチ","メタナイト","ピット","ブラックピット","ゼロスーツサムス","ワリオ",
+      "スネーク","アイク","ポケモントレーナー","ディディーコング","リュカ","ソニック","デデデ","ピクミン＆オリマー",
+      "ルカリオ","ロボット","トゥーンリンク","ウルフ","むらびと","ロックマン","Wii Fit トレーナー","ロゼッタ＆チコ",
+      "リトル・マック","ゲッコウガ","Mii 格闘タイプ","Mii 剣術タイプ","Mii 射撃タイプ","パルテナ","パックマン",
+      "ルフレ","シュルク","クッパJr.","ダックハント","リュウ","ケン","クラウド","カムイ","ベヨネッタ","インクリング",
+      "リドリー","シモン","リヒター","キングクルール","しずえ","ガオガエン","パックンフラワー","ジョーカー","勇者",
+      "バンジョー＆カズーイ","テリー","ベレト/ベレス","ミェンミェン","スティーブ","セフィロス","ホムラ/ヒカリ",
+      "カズヤ","ソラ"
+    ];
+
+    let kaisuu = 0;
+    let selectedDeath = "";
+    const STORAGE_KEY_RESULTS = "ssbu_results";
+    const STORAGE_KEY_MEMOS   = "ssbu_memos";
+    const STORAGE_KEY_DEATH   = "ssbu_death_data";
+    const loadResults = () => JSON.parse(localStorage.getItem(STORAGE_KEY_RESULTS) || "{}");
+    const saveResults = data => localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(data));
+    const loadMemos = () => JSON.parse(localStorage.getItem(STORAGE_KEY_MEMOS) || "{}");
+    const saveMemos = data => localStorage.setItem(STORAGE_KEY_MEMOS, JSON.stringify(data));
+    const loadDeath = () => JSON.parse(localStorage.getItem(STORAGE_KEY_DEATH) || "{}");
+    const saveDeath = data => localStorage.setItem(STORAGE_KEY_DEATH, JSON.stringify(data));
+
+    function escapeHtml(s) { if (s == null) return ''; return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); }); }
+    function escapeJs(s) { if (s == null) return ''; return String(s).replace(/'/g, "\\'"); }
+    function hashKey(s) { return btoa(unescape(encodeURIComponent(s))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_').slice(0,16); }
+
+    function filterCharacters(keyword) { return CHARACTERS.filter(ch => ch.includes(keyword)); }
+    function updateSelect(selectId, keyword, selected = "") {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      select.innerHTML = "";
+      filterCharacters(keyword).forEach(ch => select.add(new Option(ch, ch)));
+      if (selected) { try { select.value = selected; } catch (e) {} }
+    }
+
+    function increaseCount() { kaisuu++; updateDeathCount(); }
+    function decreaseCount() { if (kaisuu > 0) { kaisuu--; updateDeathCount(); } }
+    function updateDeathCount() { const el = document.getElementById("deathCount"); if (el) el.textContent = `回数：${kaisuu}`; }
+
+    function recordResult(result) {
+      const my = document.getElementById("myCharInput").value;
+      const opp = document.getElementById("oppCharInput").value;
+      if (!my || !opp) return;
+      const data = loadResults();
+      if (!data[my]) data[my] = {};
+      if (!data[my][opp]) data[my][opp] = { win: 0, lose: 0 };
+      data[my][opp][result]++;
+      saveResults(data);
+      document.getElementById("inputMessage").textContent =
+        `${my} vs ${opp} の「${result === "win" ? "勝ち" : "負け"}」を記録しました。`;
+      updateRateTable();
+      if (result === "lose") {
+        document.getElementById("inputPage").style.display = "none";
+        showDeathInput("lose");
+      }
+    }
+
+    function resetCharacterData() {
+      const my = document.getElementById("myCharRate").value;
+      if (!confirm(`${my} の勝率データをすべてリセットします。よろしいですか？`)) return;
+      const data = loadResults();
+      delete data[my];
+      saveResults(data);
+      updateRateTable();
+      updateTotalMatches();
+      alert(`${my} のデータをリセットしました。`);
+    }
+
+    function updateRateTable() {
+      const my = document.getElementById("myCharRate").value;
+      const sortMode = document.getElementById("sortMode").value;
+      const tbody = document.querySelector("#rateTable tbody");
+      tbody.innerHTML = "";
+      const data = loadResults();
+      const myData = data[my] || {};
+      let rows = CHARACTERS.map(opp => {
+        const r = myData[opp] || { win: 0, lose: 0 };
+        const total = r.win + r.lose;
+        const rate = total ? (r.win / total) : null;
+        return { opp, win: r.win, lose: r.lose, rate };
+      });
+      if (sortMode === "desc") rows.sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1));
+      if (sortMode === "asc")  rows.sort((a, b) => (a.rate ?? 2) - (b.rate ?? 2));
+      rows.forEach(row => {
+        const rateText = row.rate === null ? "-" : (row.rate * 100).toFixed(1) + "%";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.opp}</td>
+          <td>${row.win}</td>
+          <td>${row.lose}</td>
+          <td>${rateText}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      updateTotalMatches();
+    }
+
+    function updateTotalMatches() {
+      const my = document.getElementById("myCharRate").value;
+      const data = loadResults();
+      const myData = data[my] || {};
+      let total = 0;
+      CHARACTERS.forEach(opp => {
+        const r = myData[opp] || { win: 0, lose: 0 };
+        total += r.win + r.lose;
+      });
+      document.getElementById("totalMatches").textContent =
+        `合計対戦数：${total} 回`;
+    }
+
+    function loadMemo() {
+      const select = document.getElementById("memoChar");
+      const textEl = document.getElementById("memoText");
+      if (!select || !textEl) return;
+      const char = select.value;
+      const memos = loadMemos();
+      textEl.value = memos[char] || "";
+    }
+    function saveMemo() {
+      const char = document.getElementById("memoChar").value;
+      const text = document.getElementById("memoText").value;
+      const memos = loadMemos();
+      memos[char] = text;
+      saveMemos(memos);
+      document.getElementById("memoMessage").textContent = `${char} の対策メモを保存しました。`;
+    }
+
+    function showDeathInput(result) {
+      const area = document.getElementById("deathInputArea");
+      area.style.display = "block";
+      const my = document.getElementById("myCharInput").value;
+      const opp = document.getElementById("oppCharInput").value;
+      if (result === "win") {
+        area.innerHTML = "<p>勝利のため追加入力はありません。</p>";
+        return;
+      }
+      const deathData = loadDeath()[opp] || {};
+      let rows = "";
+      Object.keys(deathData).forEach(key => {
+        rows += `
+          <tr>
+            <td>${escapeHtml(key)}</td>
+            <td id="count-${hashKey(key)}">${deathData[key]}</td>
+            <td><button onclick="increaseRow('${escapeJs(key)}')">＋</button></td>
+            <td><button onclick="decreaseRow('${escapeJs(key)}')">−</button></td>
+          </tr>
+        `;
+      });
+      area.innerHTML = `
+        <div class="card">
+          <h3>バースト記録を入力</h3>
+          <p><strong>${escapeHtml(my)}</strong> vs <strong>${escapeHtml(opp)}</strong></p>
+          <table class="death-table">
+            <tr><th>バースト</th><th>回数</th><th colspan="2">操作</th></tr>
+            ${rows}
+          </table>
+          <textarea id="newDeathText" placeholder="新しいバースト記録を入力"></textarea>
+          <div style="margin-top:8px;">
+            <button class="teal-action" onclick="saveNewDeath()">新規項目を追加</button>
+            <button class="reset-small" onclick="finishDeathInput()">終了</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function selectDeath() {
+      const opp = document.getElementById("oppCharInput").value;
+      const deathData = loadDeath()[opp] || {};
+      selectedDeath = document.getElementById("deathSelect").value;
+      kaisuu = deathData[selectedDeath] || 0;
+      updateDeathCount();
+    }
+
+    function finishDeathInput() {
+      const area = document.getElementById("deathInputArea");
+      if (area) {
+        area.style.display = "none";
+        area.innerHTML = "";
+        area.classList.remove('active');
+      }
+      kaisuu = 0;
+      const inputPage = document.getElementById("inputPage");
+      if (inputPage) {
+        inputPage.style.display = "block";
+        inputPage.classList.add('active');
+      }
+      const opp = document.getElementById("oppCharInput") ? document.getElementById("oppCharInput").value : '';
+      if (opp) localStorage.setItem('ssbu_last_death_input_char', opp);
+      const memoPage = document.getElementById('memoPage');
+      const memoSelect = document.getElementById('memoChar');
+      const openState = JSON.parse(localStorage.getItem('ssbu_death_record_open') || 'false');
+      const openChar = localStorage.getItem('ssbu_death_record_char') || '';
+      const isMemoVisible = memoPage && (memoPage.style.display === 'block' || memoPage.classList.contains('active'));
+      if (isMemoVisible && openState) {
+        if (typeof updateSelect === 'function') updateSelect('memoChar', '', openChar || opp || '');
+        requestAnimationFrame(() => {
+          const currentChar = memoSelect ? memoSelect.value : '';
+          const charToRender = currentChar || openChar || opp || '';
+          if (charToRender) {
+            if (memoSelect && memoSelect.value !== charToRender) memoSelect.value = charToRender;
+            renderMatchData(charToRender);
+          }
+        });
+      }
+    }
+
+    function saveNewDeath() {
+      const opp = document.getElementById("oppCharInput").value;
+      const text = document.getElementById("newDeathText").value.trim();
+      if (!text) return;
+      const deathData = loadDeath();
+      if (!deathData[opp]) deathData[opp] = {};
+      deathData[opp][text] = (deathData[opp][text] || 0) + 1;
+      saveDeath(deathData);
+      document.getElementById("newDeathText").value = "";
+      showDeathInput("lose");
+      localStorage.setItem('ssbu_last_death_input_char', opp);
+      const memoPage = document.getElementById('memoPage');
+      const openState = JSON.parse(localStorage.getItem('ssbu_death_record_open') || 'false');
+      if (memoPage && (memoPage.style.display === 'block' || memoPage.classList.contains('active')) && openState) {
+        if (typeof updateSelect === 'function') updateSelect('memoChar', '', opp);
+        const memoSelect = document.getElementById('memoChar');
+        requestAnimationFrame(() => {
+          const charToRender = (memoSelect && memoSelect.value) ? memoSelect.value : opp;
+          if (memoSelect && memoSelect.value !== charToRender) memoSelect.value = charToRender;
+          renderMatchData(charToRender);
+        });
+      }
+    }
+
+    function finishNewDeath() {
+      const text = document.getElementById("newDeathText").value.trim();
+      if (text) {
+        if (!confirm("保存しますか？")) {
+          document.getElementById("deathInputArea").innerHTML = "";
+          return;
+        }
+        saveNewDeath();
+      }
+      showDeathInput("lose");
+    }
+
+    function increaseRow(key) {
+      const opp = document.getElementById("oppCharInput").value;
+      const deathData = loadDeath();
+      if (!deathData[opp]) deathData[opp] = {};
+      deathData[opp][key] = (deathData[opp][key] || 0) + 1;
+      saveDeath(deathData);
+      const el = document.getElementById(`count-${hashKey(key)}`);
+      if (el) el.textContent = deathData[opp][key];
+    }
+
+    function decreaseRow(key) {
+      const opp = document.getElementById("oppCharInput").value;
+      const deathData = loadDeath();
+      if (!deathData[opp]) deathData[opp] = {};
+      if ((deathData[opp][key] || 0) > 0) {
+        deathData[opp][key] = deathData[opp][key] - 1;
+        saveDeath(deathData);
+      }
+      const el = document.getElementById(`count-${hashKey(key)}`);
+      if (el) el.textContent = deathData[opp][key] || 0;
+    }
+
+    function showPage(pageId) {
+      const deathArea = document.getElementById('deathInputArea');
+      if (deathArea && (deathArea.style.display === 'block' || deathArea.classList.contains('active'))) {
+        alert('バースト記録の入力が開いています。終了ボタンを押してから他の画面に移動してください。');
+        return;
+      }
+      const pages = ['inputPage', 'ratePage', 'memoPage'];
+      pages.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.style.display = 'none';
+          el.classList.remove('active');
+        }
+      });
+      if (deathArea) {
+        deathArea.style.display = 'none';
+        deathArea.classList.remove('active');
+      }
+      const target = document.getElementById(pageId);
+      if (target) {
+        target.style.display = 'block';
+        target.classList.add('active');
+      }
+      if (pageId === 'memoPage') {
+        const openState = JSON.parse(localStorage.getItem('ssbu_death_record_open') || 'false');
+        const openChar = localStorage.getItem('ssbu_death_record_char') || '';
+        const lastChar = localStorage.getItem('ssbu_last_death_input_char') || '';
+        const prefer = openChar || lastChar || '';
+        if (typeof updateSelect === 'function') updateSelect('memoChar', '', prefer);
+        const memoSelect = document.getElementById('memoChar');
+        requestAnimationFrame(() => {
+          const currentChar = memoSelect ? memoSelect.value : '';
+          if (openState) {
+            const charToRender = currentChar || openChar || lastChar || '';
+            if (charToRender) {
+              if (memoSelect && memoSelect.value !== charToRender) memoSelect.value = charToRender;
+              renderMatchData(charToRender);
+              localStorage.setItem('ssbu_death_record_open', JSON.stringify(true));
+              localStorage.setItem('ssbu_death_record_char', charToRender);
+            } else {
+              document.getElementById('matchDataArea').innerHTML = '';
+            }
+          } else {
+            document.getElementById('matchDataArea').innerHTML = '';
+          }
+        });
+      }
+    }
+
+    function showMatchData() {
+      const matchArea = document.getElementById('matchDataArea');
+      const memoSelect = document.getElementById('memoChar');
+      if (!matchArea || !memoSelect) return;
+      const char = memoSelect.value || '';
+      if (!char && matchArea.innerHTML.trim() === '') return;
+      if (matchArea.innerHTML.trim() !== '') {
+        const savedChar = localStorage.getItem('ssbu_death_record_char') || '';
+        if (savedChar === char || (!savedChar && char === '')) {
+          matchArea.innerHTML = '';
+          localStorage.setItem('ssbu_death_record_open', JSON.stringify(false));
+          localStorage.removeItem('ssbu_death_record_char');
+          return;
+        }
+        if (char) {
+          renderMatchData(char);
+          localStorage.setItem('ssbu_death_record_open', JSON.stringify(true));
+          localStorage.setItem('ssbu_death_record_char', char);
+          return;
+        }
+      }
+      if (!char) return;
+      renderMatchData(char);
+      localStorage.setItem('ssbu_death_record_open', JSON.stringify(true));
+      localStorage.setItem('ssbu_death_record_char', char);
+    }
+
+    function renderMatchData(char) {
+      const deathData = loadDeath()[char] || {};
+      let html = "<h3>試合データ</h3><ul>";
+      Object.keys(deathData).forEach(key => {
+        html += `<li>${escapeHtml(key)}：${deathData[key]} 回</li>`;
+      });
+      html += "</ul>";
+      html += `<div style="text-align:right; margin-top:8px;">
+                 <button class="teal-action death-edit-toggle" onclick="openDeathEditor('${escapeJs(char)}')">バースト記録 編集</button>
+               </div>`;
+      document.getElementById("matchDataArea").innerHTML = html;
+    }
+
+    function attachMemoCharAutoUpdate() {
+      const memoSelect = document.getElementById('memoChar');
+      if (!memoSelect) return;
+      memoSelect.addEventListener('change', () => {
+        const matchArea = document.getElementById('matchDataArea');
+        const openState = JSON.parse(localStorage.getItem('ssbu_death_record_open') || 'false');
+        if (matchArea && matchArea.innerHTML.trim() !== '' && openState) {
+          const char = memoSelect.value || '';
+          if (char) {
+            renderMatchData(char);
+            localStorage.setItem('ssbu_death_record_char', char);
+          } else {
+            matchArea.innerHTML = '';
+            localStorage.setItem('ssbu_death_record_open', JSON.stringify(false));
+            localStorage.removeItem('ssbu_death_record_char');
+          }
+        }
+      });
+    }
+
+    let _deathEditorChar = "";
+    let _deathEditorData = {};
+    let _deathEditorOriginalData = {};
+
+    function openDeathEditor(char) {
+      if (!char) return;
+      _deathEditorChar = char;
+      _deathEditorData = Object.assign({}, loadDeath()[char] || {});
+      _deathEditorOriginalData = JSON.parse(JSON.stringify(_deathEditorData));
+      renderDeathEditor();
+      const modal = document.getElementById('deathEditorModal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function renderDeathEditor() {
+      const listEl = document.getElementById('deathEditorList');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      const keys = Object.keys(_deathEditorData);
+      if (keys.length === 0) {
+        listEl.innerHTML = '<div style="padding:8px;color:#666">このキャラのバースト記録はまだありません。</div>';
+        return;
+      }
+      keys.forEach(key => {
+        const count = _deathEditorData[key];
+        const row = document.createElement('div');
+        row.className = 'death-editor-row';
+        row.innerHTML = `
+          <input type="text" class="death-name-input" value="${escapeHtml(key)}" data-old="${escapeHtml(key)}" />
+          <div class="count">
+            <button onclick="changeDeathCount('${escapeJs(key)}', -1)">-</button>
+            <span class="count-value" id="count_${hashKey(key)}">${count}</span>
+            <button onclick="changeDeathCount('${escapeJs(key)}', 1)">+</button>
+          </div>
+          <div class="row-actions">
+            <button class="reset-small" onclick="applyDelete('${escapeJs(key)}')">削除</button>
+          </div>
+        `;
+        listEl.appendChild(row);
+      });
+    }
+
+    function changeDeathCount(key, delta) {
+      if (!_deathEditorData.hasOwnProperty(key)) return;
+      let v = Number(_deathEditorData[key] || 0) + delta;
+      if (v < 0) v = 0;
+      _deathEditorData[key] = v;
+      const el = document.getElementById('count_' + hashKey(key));
+      if (el) el.textContent = v;
+    }
+
+    function applyDelete(key) {
+      if (!confirm('「' + key + '」を削除しますか？')) return;
+      delete _deathEditorData[key];
+      renderDeathEditor();
+    }
+
+    function collectNameEdits() {
+      const inputs = Array.from(document.querySelectorAll('.death-name-input'));
+      const newMap = {};
+      inputs.forEach(inp => {
+        const oldKey = inp.getAttribute('data-old');
+        const newName = inp.value.trim();
+        if (!newName) return;
+        const oldVal = Number(_deathEditorData[oldKey] || 0);
+        newMap[newName] = (Number(newMap[newName] || 0) + oldVal);
+      });
+      _deathEditorData = newMap;
+    }
+
+    function confirmDeleteAll() {
+      if (!confirm('このキャラのバースト記録をすべて削除しますか？')) return;
+      _deathEditorData = {};
+      renderDeathEditor();
+    }
+
+    function saveDeathEditor() {
+      if (!_deathEditorChar) return;
+      collectNameEdits();
+      const all = loadDeath();
+      all[_deathEditorChar] = Object.assign({}, _deathEditorData);
+      saveDeath(all);
+      renderMatchData(_deathEditorChar);
+      localStorage.setItem('ssbu_death_record_char', _deathEditorChar);
+      _deathEditorOriginalData = JSON.parse(JSON.stringify(_deathEditorData));
+      closeDeathEditor();
+    }
+
+    function isEditorDirty() {
+      const aKeys = Object.keys(_deathEditorOriginalData).sort();
+      const bKeys = Object.keys(_deathEditorData).sort();
+      if (aKeys.length !== bKeys.length) return true;
+      for (let k of aKeys) {
+        if (!bKeys.includes(k)) return true;
+        if (Number(_deathEditorOriginalData[k] || 0) !== Number(_deathEditorData[k] || 0)) return true;
+      }
+      return false;
+    }
+
+    function onCloseDeathEditorRequest() {
+      const inputs = Array.from(document.querySelectorAll('.death-name-input'));
+      const temp = {};
+      inputs.forEach(inp => {
+        const oldKey = inp.getAttribute('data-old');
+        const newName = inp.value.trim();
+        const oldVal = Number(_deathEditorData[oldKey] || 0);
+        if (!newName) return;
+        temp[newName] = (Number(temp[newName] || 0) + oldVal);
+      });
+      if (Object.keys(temp).length > 0) {
+        _deathEditorData = temp;
+      }
+      if (isEditorDirty()) {
+        const ok = confirm('保存されていない変更があります。保存して終了しますか？\nOK：保存して終了　キャンセル：保存せず終了');
+        if (ok) {
+          saveDeathEditor();
+        } else {
+          _deathEditorData = JSON.parse(JSON.stringify(_deathEditorOriginalData));
+          closeDeathEditor();
+        }
+      } else {
+        closeDeathEditor();
+      }
+    }
+
+    function closeDeathEditor() {
+      const modal = document.getElementById('deathEditorModal');
+      if (modal) modal.style.display = 'none';
+      _deathEditorChar = "";
+      _deathEditorData = {};
+      _deathEditorOriginalData = {};
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      updateSelect("myCharInput", "");
+      updateSelect("oppCharInput", "");
+      updateSelect("myCharRate", "");
+      updateSelect("memoChar", "");
+      updateRateTable();
+      loadMemo();
+      attachMemoCharAutoUpdate();
+    });
+  </script>
+</body>
+</html>
